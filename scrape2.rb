@@ -2,59 +2,34 @@ require 'nokogiri'
 require 'rubygems'
 require 'open-uri'
 require "erb"
-
-require 'selenium-webdriver'
+require 'capybara/poltergeist'
 require 'pry'
 require 'os'
-
-#Selenium::WebDriver.logger.level = :debug
-
-# OS X version
-# if OS.mac?
-# 	caps = Selenium::WebDriver::Remote::Capabilities.chrome("desiredCapabilities" => {"takesScreenshot" => true}, "chromeOptions" => {"binary" => "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"})
-# end
-# # Windows version
-# if OS.windows?
-# 	Selenium::WebDriver::Chrome.driver_path = 'C:\development\tools\chromedriver.exe'
-# 	caps = Selenium::WebDriver::Remote::Capabilities.chrome("desiredCapabilities" => {"takesScreenshot" => true}, "chromeOptions" => {"binary" => 'C:\Users\Squirrel\AppData\Local\Google\Chrome SxS\Application\chrome.exe'})
-# end
-
-# browser = Selenium::WebDriver.for :chrome, desired_capabilities: caps, switches: %w[--headless --no-sandbox --disable-gpu --remote-debugin-port=9222 --screen-size=1200x3000]
-# # Selenium::WebDriver.logger.output = 'selenium.log'
-
-# browser.navigate.to "https://novelplanet.com/Novel/Kumo-Desu-ga-Nani-ka"
-
-# wait = Selenium::WebDriver::Wait.new(:timeout => 15)
-
-# # Login
-# input = wait.until {
-#     element = browser.find_element(:id, "d_rut")
-#     element if element.displayed?
-# }
-
-## PHANTOM
-# Require the gems
-require 'capybara/poltergeist'
-
-
+require 'optparse'
 
 def configure_driver
-	Selenium::WebDriver::Chrome.path ="/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
-	options = Selenium::WebDriver::Chrome::Options.new
+	Capybara.register_driver :poltergeist do |app|
+		options = {
+	    debug: false,
+	    timeout: 120,
+	    window_size: [1280, 1440],
+	    phantomjs_options: [
+	      '--proxy-type=none', 
+	      '--load-images=no', 
+	      '--ignore-ssl-errors=yes', 
+	      '--ssl-protocol=any',
+	      '--web-security=false','--debug=false'
+	    ],
+	    js_errors: false,
+	    default_wait_time: 20,
+	    phantomjs_logger: File.open(File::NULL, 'w') #Disable login, OH GOD
+	  }
+	  Capybara::Poltergeist::Driver.new(app, options)
+	end
 
-	options.add_argument('--ignore-certificate-errors')
-	options.add_argument('--disable-popup-blocking')
-	options.add_argument('--disable-translate')
-	options.add_argument('--headless')
-	options.add_argument('--no-sandbox')
-	options.add_argument('--disable-gpu')
-	#options.add_argument('--screen-size=1200x3000')
-	@driver = Selenium::WebDriver.for :chrome, options: options
-	@wait = Selenium::WebDriver::Wait.new(:timeout => 15)
-end
-
-def stop_driver
-	@driver.quit
+	# Configure Capybara to use Poltergeist as the driver
+	Capybara.default_driver = :poltergeist
+	@browser  = Capybara.current_session
 end
 
 # Metadata result example
@@ -106,81 +81,58 @@ def convert_ebook metadata, content
 	system("ebook-convert \"output/html/#{@novel_file_name}.html\" \"output/mobi/#{@novel_file_name}.mobi\" \
 	    --output-profile kindle_dx --no-inline-toc \
 	    --title \"#{metadata[:title]}\" --publisher \"#{metadata[:translator]}\" \
-	    --language en --authors '#{metadata[:author].count > 1 ? metadata[:author].first : metadata[:author]}'")
+	    --language en --authors '#{metadata[:author].count > 1 ? metadata[:author].first : metadata[:author]}' --cover #{@cover}")
 end
-
-
 
 #############
 # Variables #
 #############
-@driver, @wait = nil
-@story_url = "https://novelplanet.com/Novel/I-Was-a-Sword-When-I-Reincarnated-LN" #|| ARGV.first
+@browser = nil
+@story_url = ARGV.first
+@cover = ARGV.last
 @base_url, @novel_file_name = @story_url.split('/Novel/')
 @novel_file_name.gsub!(/[^a-zA-Z-]/, '')
 
-
-# configure_driver
-# @driver.navigate.to @story_url
-# # Bot check skip!
-# #@wait.until { @driver.find_element(:class => "txtSearchTop") }
-# #@driver.save_screenshot("./before.png")
-# # Wait until the warning message vanishes
-# @wait.until { !@driver.page_source.include? "Make sure to enable cookies and javascript." }
-# #@driver.save_screenshot("./after.png")
-
-# # begin
-# #   @wait.until { @driver.find_element(:id, 'message').displayed? } #check if message received
-# # rescue
-# #   ##this block get's executed if there is any kind of exception error
-# #   stop_driver
-# # end
-
-# # Pass everything to Nokogiri
-# page_source = @driver.page_source
+# Options
+OptionParser.new do |parser|
+parser.on("-nd", "--no-download", "Skip Downloading") do |v|
+    options[:name] = v
+  end
+end.parse!
 
 
-# Configure Poltergeist to not blow up on websites with js errors aka every website with js
-# See more options at https://github.com/teampoltergeist/poltergeist#customization
-Capybara.register_driver :poltergeist do |app|
-	options = {
-    debug: false,
-    timeout: 120,
-    window_size: [1280, 1440],
-    phantomjs_options: [
-      '--proxy-type=none', 
-      '--load-images=no', 
-      '--ignore-ssl-errors=yes', 
-      '--ssl-protocol=any',
-      '--web-security=false','--debug=false'
-    ],
-    js_errors: false,
-    default_wait_time: 20,
-    phantomjs_logger: File.open(File::NULL, 'w')
-  }
-  Capybara::Poltergeist::Driver.new(app, options)
-  #Capybara::Poltergeist::Driver.new(app, js_errors: false)
+configure_driver
+@browser.visit @story_url
+page_source = @browser.html
+
+while page_source.include?('Make sure to enable cookies and javascript.') do
+	sleep 1
+	page_source = @browser.html
 end
-
-# Configure Capybara to use Poltergeist as the driver
-Capybara.default_driver = :poltergeist
-browser = Capybara.current_session
-#url = "https://novelplanet.com/Novel/I-Was-a-Sword-When-I-Reincarnated-LN"#"https://github.com/jnicklas/capybara"
-
-browser.visit @story_url
-#expect(page).to have_content 'Novel list'
-sleep 8
-page_source = browser.html
 
 page = Nokogiri::HTML(page_source)
 # Get the metadata
 metadata_node = page.css('.post-contentDetails')
 story_metadata = get_story_metadata metadata_node
-chapters = page.xpath('//h3[contains(text(), "Chapter list")]').first.parent.css(".rowChapter")
+chapters = []
+begin
+	chapter_container = page.xpath('//h3[contains(text(), "Chapter list")]')
+	while chapter_container.nil? || chapter_container.empty? do
+		sleep 1
+		page_source = @browser.html
+		page = Nokogiri::HTML(page_source)
+		chapter_container = page.xpath('//h3[contains(text(), "Chapter list")]')
+	end
+	chapters = chapter_container.first.parent.css(".rowChapter")
+rescue NoMethodError
+	binding.pry
+	@browser.save_and_open_page
+end
 
 @novel_text = ""
 if chapters.count == 0
 	puts "No chapters :("
+	@browser.save_and_open_page
 else
 	# Progress
 	chapter_total = chapters.count
@@ -197,13 +149,13 @@ else
 		# page_source = @driver.page_source
 		page_source = nil
 		begin
-			browser.visit chapter_url
+			@browser.visit chapter_url
 			#expect(page).to have_content 'Novel list'
-			page_source = browser.html
+			page_source = @browser.html
 		rescue Capybara::Poltergeist::StatusFailError
-			browser.visit chapter_url
+			@browser.visit chapter_url
 			#expect(page).to have_content 'Novel list'
-			page_source = browser.html
+			page_source = @browser.html
 		end
 		page = Nokogiri::HTML(page_source)
 		# Remove ads
@@ -228,54 +180,4 @@ File.open("output/html/#{@novel_file_name}.html", 'w+') do |f|
 end
 
 convert_ebook story_metadata, @content
-
-#####
-
-# # Configuration
-# novel_url = "https://novelplanet.com/Novel/Kumo-Desu-ga-Nani-ka"
-# novel_title = "Kumo Desu ga, Nani ka?"
-# novel_author = "Baba Okina"
-# novel_publisher = "Raising the Dead"
-# base_url = "https://novelplanet.com"
-# # Flag if the conversion failed and you want to try again
-# only_convert = false
-
-
-#stop_driver
-
-# Story data = div.post-contentDetails
-# story_data = []
-# driver.navigate.to "http://google.com"
-
-# element = driver.find_element(name: 'q')
-# element.send_keys "Hello WebDriver!"
-# element.submit
-
-# puts driver.title
-# binding.pry
-
-# Has text "Please wait 5 seconds..."
-# 
-# Please wait 5 seconds...
-# Make sure to enable cookies and javascript.
-# This site does not work with "Mini browsers" (e.g. UC mini, Opera mini...)
-
-# Check that the form exists
-# blerp = wait.until {
-#     element = driver.find_element(:link, "Novel List")
-#     element if element.displayed?
-# }
- 
-# When it has Novel list, we're in the right place
-# xpath => //*[@id="nav"]/ul/li[2]/a
-# Selector - #nav > ul > li:nth-child(2) > a
-
-# Another idea: search bar
-# #nav > ul > li.liHideFloatNav > input
-# //*[@id="nav"]/ul/li[4]/input
-
-# input .txtSearchTop con placeholder = Search
-
-
-
 
