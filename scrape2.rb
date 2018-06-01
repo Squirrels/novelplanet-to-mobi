@@ -32,6 +32,11 @@ require 'os'
 #     element if element.displayed?
 # }
 
+## PHANTOM
+# Require the gems
+require 'capybara/poltergeist'
+
+
 
 def configure_driver
 	Selenium::WebDriver::Chrome.path ="/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"
@@ -101,7 +106,7 @@ def convert_ebook metadata, content
 	system("ebook-convert \"output/html/#{@novel_file_name}.html\" \"output/mobi/#{@novel_file_name}.mobi\" \
 	    --output-profile kindle_dx --no-inline-toc \
 	    --title \"#{metadata[:title]}\" --publisher \"#{metadata[:translator]}\" \
-	    --language en --authors '#{metadata[:author]}'")
+	    --language en --authors '#{metadata[:author].count > 1 ? metadata[:author].first : metadata[:author]}'")
 end
 
 
@@ -115,24 +120,58 @@ end
 @novel_file_name.gsub!(/[^a-zA-Z-]/, '')
 
 
-configure_driver
-@driver.navigate.to @story_url
-# Bot check skip!
-#@wait.until { @driver.find_element(:class => "txtSearchTop") }
-#@driver.save_screenshot("./before.png")
-# Wait until the warning message vanishes
-@wait.until { !@driver.page_source.include? "Make sure to enable cookies and javascript." }
-#@driver.save_screenshot("./after.png")
+# configure_driver
+# @driver.navigate.to @story_url
+# # Bot check skip!
+# #@wait.until { @driver.find_element(:class => "txtSearchTop") }
+# #@driver.save_screenshot("./before.png")
+# # Wait until the warning message vanishes
+# @wait.until { !@driver.page_source.include? "Make sure to enable cookies and javascript." }
+# #@driver.save_screenshot("./after.png")
 
-# begin
-#   @wait.until { @driver.find_element(:id, 'message').displayed? } #check if message received
-# rescue
-#   ##this block get's executed if there is any kind of exception error
-#   stop_driver
-# end
+# # begin
+# #   @wait.until { @driver.find_element(:id, 'message').displayed? } #check if message received
+# # rescue
+# #   ##this block get's executed if there is any kind of exception error
+# #   stop_driver
+# # end
 
-# Pass everything to Nokogiri
-page_source = @driver.page_source
+# # Pass everything to Nokogiri
+# page_source = @driver.page_source
+
+
+# Configure Poltergeist to not blow up on websites with js errors aka every website with js
+# See more options at https://github.com/teampoltergeist/poltergeist#customization
+Capybara.register_driver :poltergeist do |app|
+	options = {
+    debug: false,
+    timeout: 120,
+    window_size: [1280, 1440],
+    phantomjs_options: [
+      '--proxy-type=none', 
+      '--load-images=no', 
+      '--ignore-ssl-errors=yes', 
+      '--ssl-protocol=any',
+      '--web-security=false','--debug=false'
+    ],
+    js_errors: false,
+    default_wait_time: 20,
+    phantomjs_logger: File.open(File::NULL, 'w')
+  }
+  Capybara::Poltergeist::Driver.new(app, options)
+  #Capybara::Poltergeist::Driver.new(app, js_errors: false)
+end
+
+# Configure Capybara to use Poltergeist as the driver
+Capybara.default_driver = :poltergeist
+browser = Capybara.current_session
+#url = "https://novelplanet.com/Novel/I-Was-a-Sword-When-I-Reincarnated-LN"#"https://github.com/jnicklas/capybara"
+
+browser.visit @story_url
+#expect(page).to have_content 'Novel list'
+sleep 8
+page_source = browser.html
+
 page = Nokogiri::HTML(page_source)
 # Get the metadata
 metadata_node = page.css('.post-contentDetails')
@@ -153,11 +192,20 @@ else
 		p "#{index+1}/#{chapter_total}"
 		# Build url
 		chapter_url = @base_url + chapter['alink']
-		@driver.navigate.to chapter_url
-		@wait.until { !@driver.page_source.include? "Make sure to enable cookies and javascript." }
-		page_source = @driver.page_source
+		# @driver.navigate.to chapter_url
+		# @wait.until { !@driver.page_source.include? "Make sure to enable cookies and javascript." }
+		# page_source = @driver.page_source
+		page_source = nil
+		begin
+			browser.visit chapter_url
+			#expect(page).to have_content 'Novel list'
+			page_source = browser.html
+		rescue Capybara::Poltergeist::StatusFailError
+			browser.visit chapter_url
+			#expect(page).to have_content 'Novel list'
+			page_source = browser.html
+		end
 		page = Nokogiri::HTML(page_source)
-
 		# Remove ads
 		content = page.css('#divReadContent')
 		content.search('div').each do |ad|
@@ -175,7 +223,7 @@ template = File.read('./template.html.erb')
 result = ERB.new(template).result(binding)
 
 # write result to file
-File.open("output/html/#{@novel_title}.html", 'w+') do |f|
+File.open("output/html/#{@novel_file_name}.html", 'w+') do |f|
   f.write result
 end
 
@@ -193,7 +241,7 @@ convert_ebook story_metadata, @content
 # only_convert = false
 
 
-stop_driver
+#stop_driver
 
 # Story data = div.post-contentDetails
 # story_data = []
