@@ -5,10 +5,10 @@ require "erb"
 
 
 # Configuration
-novel_url = "https://novelplanet.com/Novel/Url-Of-Novel"
-novel_title = "Name of Novel"
-novel_author = "Author of Novel"
-novel_publisher = "Anything, really"
+novel_url = "https://novelplanet.com/Novel/Kumo-Desu-ga-Nani-ka"
+novel_title = "Kumo Desu ga, Nani ka?"
+novel_author = "Baba Okina"
+novel_publisher = "Raising the Dead"
 base_url = "https://novelplanet.com"
 # Flag if the conversion failed and you want to try again
 only_convert = false
