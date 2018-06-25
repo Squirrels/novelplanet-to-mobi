@@ -1,7 +1,7 @@
 require 'nokogiri' 
 require 'rubygems'
 require 'open-uri'
-require "erb"
+require 'erb'
 require 'capybara/poltergeist'
 require 'pry'
 require 'os'
@@ -81,9 +81,9 @@ end
 ###################
 # Chapter Methods #
 ###################
-
+#TODO
 def parse_chapter url
-	# Visit and get the SHIT
+	# Visit and get the chapter's content
 end
 
 
@@ -96,7 +96,8 @@ def convert_ebook metadata, content
 	title = metadata[:title]
 	publisher = metadata[:translator]
 	authors = metadata[:author].count > 1 ? metadata[:author].first : metadata[:author]
-	cover = @cover.empty? ? '' : ('--cover ' + @cover)
+	cover_path = "output/html/#{@novel_file_name}/cover.png"
+	cover = File.exists?(cover_path) ? '' : ('--cover ' + cover_path)
 	# # Convert it using Calibre
 	system("ebook-convert \"output/html/#{@novel_file_name}.html\" \"output/mobi/#{@novel_file_name}.mobi\" \
 	    --output-profile kindle_dx \
@@ -109,17 +110,22 @@ end
 #############
 @browser = nil
 @story_url = ARGV.first
-@cover = ARGV.last
 @base_url, @novel_file_name = @story_url.split('/Novel/')
 @novel_file_name.gsub!(/[^a-zA-Z-]/, '')
 
 # Options
+@options = {}
+@options[:force] = false
 OptionParser.new do |parser|
-parser.on("-f", "--force", "Force redownload") do |v|
-    options[:name] = v
+	parser.on("-c", "--cover C", "Specify cover url for the image for the story") do |c|
+    @options[:cover] = c
+  end
+	parser.on("-f", "--force", "Force redownload all chapters") do |force|
+    @options[:force] = true
   end
 end.parse!
 
+# Configuration
 configure_driver
 @browser.visit @story_url
 page_source = @browser.html
@@ -139,7 +145,7 @@ Dir.mkdir(directory_name) unless File.exists?(directory_name)
 downloaded_chapters = Dir.entries(directory_name).select{ |e| e.include? "html" }.sort_by(&:to_i)
 # Scrape stage
 
-get_story_cover @cover
+get_story_cover(@options[:cover]) unless @options[:cover].nil?
 
 # Get the metadata
 metadata_node = page.css('.post-contentDetails')
@@ -181,7 +187,7 @@ else
 	# Now, for each, do the correct processing
 	chapters.each_with_index do |chapter, index|
 		# Check if we already downloaded it
-		if downloaded_chapters.include? "#{index+1}.html"
+		if downloaded_chapters.include?("#{index+1}.html") && !@options[:force]
 			p "#{index+1}/#{chapter_total} - Already downloaded"
 			next
 		else
@@ -215,7 +221,6 @@ else
 		  f.write "<h2>Chapter #{index+1}</h2><br>" + content.inner_html.strip
 		end
 		downloaded_chapters << "#{index+1}.html"
-		#@novel_text += content.inner_html
 	end
 end
 
@@ -226,6 +231,7 @@ end
 downloaded_chapters.sort_by(&:to_i).each do |chapter|
 	@content += File.read("output/html/#{@novel_file_name}/#{chapter}")
 end
+
 # render template
 template = File.read('./template.html.erb')
 result = ERB.new(template).result(binding)
