@@ -95,9 +95,9 @@ def convert_ebook metadata, content
 	# Get the data
 	title = metadata[:title]
 	publisher = metadata[:translator]
-	authors = metadata[:author].count > 1 ? metadata[:author].first : metadata[:author]
+	authors = (metadata[:author].kind_of?(Array) && metadata[:author].count > 1) ? metadata[:author].first : metadata[:author]
 	cover_path = "output/html/#{@novel_file_name}/cover.png"
-	cover = File.exists?(cover_path) ? '' : ('--cover ' + cover_path)
+	cover = File.exists?(cover_path) ? ("--cover \"" + cover_path + "\"") : ''
 	# # Convert it using Calibre
 	system("ebook-convert \"output/html/#{@novel_file_name}.html\" \"output/mobi/#{@novel_file_name}.mobi\" \
 	    --output-profile kindle_dx \
@@ -194,7 +194,9 @@ else
 			p "#{index+1}/#{chapter_total}"
 		end
 		# Build url
-		chapter_url = @base_url + chapter['alink']
+		# Escape to fix url if it has special characters
+		chapter_url = URI.escape(@base_url + chapter['alink'])
+		
 		# @driver.navigate.to chapter_url
 		# @wait.until { !@driver.page_source.include? "Make sure to enable cookies and javascript." }
 		# page_source = @driver.page_source
