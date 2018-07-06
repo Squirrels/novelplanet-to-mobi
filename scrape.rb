@@ -96,12 +96,14 @@ def convert_ebook metadata, content
 	title = metadata[:title]
 	publisher = metadata[:translator]
 	authors = (metadata[:author].kind_of?(Array) && metadata[:author].count > 1) ? metadata[:author].first : metadata[:author]
+	tags = "NovelPlanet"
+	description = metadata[:description]
 	cover_path = "output/html/#{@novel_file_name}/cover.png"
 	cover = File.exists?(cover_path) ? ("--cover \"" + cover_path + "\"") : ''
-	# # Convert it using Calibre
+	# Convert it using Calibre
 	system("ebook-convert \"output/html/#{@novel_file_name}.html\" \"output/mobi/#{@novel_file_name}.mobi\" \
 	    --output-profile kindle_dx \
-	    --title \"#{title}\" --publisher \"#{publisher}\" \
+	    --title \"#{title}\" --publisher \"#{publisher}\" --tags \"#{tags}\" --comments \"#{description}\"\
 	    --language en --authors \"#{authors}\" #{cover}")
 end
 
@@ -157,6 +159,7 @@ while metadata_node.empty? do
 	metadata_node = page.css('.post-contentDetails')
 end
 story_metadata = get_story_metadata metadata_node
+story_metadata[:description] = page.css('.post-contentDetails + div + div').nil? ? "" : page.css('.post-contentDetails + div + div').text
 save_or_update_metadata story_metadata
 
 # Chapters
