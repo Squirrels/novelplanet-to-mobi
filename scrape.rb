@@ -78,14 +78,6 @@ def save_or_update_metadata metadata
 	end
 end
 
-###################
-# Chapter Methods #
-###################
-#TODO
-def parse_chapter url
-	# Visit and get the chapter's content
-end
-
 
 #################
 # eBook Methods #
@@ -229,7 +221,6 @@ else
 	end
 end
 
-#@content = @novel_text
 # Convert stage
 # Read files in order
 @content = ""
